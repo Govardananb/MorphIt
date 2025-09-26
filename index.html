@@ -1,0 +1,60 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>MorphIt - File Converter</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+      @import url('https://fonts.googleapis.com/css2?family=Sora:wght@100..800&display=swap');
+      html {
+        scroll-behavior: smooth;
+      }
+      body {
+        font-family: 'Sora', sans-serif;
+      }
+
+      @keyframes fade-in {
+        from { opacity: 0; }
+        to { opacity: 1; }
+      }
+      @keyframes fade-in-down {
+        from { opacity: 0; transform: translateY(-10px); }
+        to { opacity: 1; transform: translateY(0); }
+      }
+      @keyframes fade-in-up {
+        from { opacity: 0; transform: translateY(10px); }
+        to { opacity: 1; transform: translateY(0); }
+      }
+       @keyframes shimmer {
+        100% { transform: translateX(100%); }
+      }
+       @keyframes rotate-glow {
+        0% { transform: rotate(0deg); }
+        100% { transform: rotate(360deg); }
+      }
+      .animate-fade-in {
+        animation: fade-in 0.5s ease-out forwards;
+      }
+      .animate-fade-in-down {
+        animation: fade-in-down 0.5s ease-out forwards;
+      }
+      .animate-fade-in-up {
+        animation: fade-in-up 0.5s ease-out forwards;
+      }
+    </style>
+  <script type="importmap">
+{
+  "imports": {
+    "react/": "https://aistudiocdn.com/react@^19.1.1/",
+    "react": "https://aistudiocdn.com/react@^19.1.1",
+    "react-dom/": "https://aistudiocdn.com/react-dom@^19.1.1/"
+  }
+}
+</script>
+</head>
+  <body class="bg-[#0E0B0B] text-[#715959]">
+    <div id="root"></div>
+    <script type="module" src="/index.tsx"></script>
+  </body>
+</html>

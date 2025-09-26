@@ -1,0 +1,5 @@
+{
+  "name": "MorphIt - File Converter",
+  "description": "An elegant, single-page application to instantly transform your files. Upload a file, choose the desired format, and download it in a snap. Designed with a sleek, modern dark-mode interface.",
+  "requestFramePermissions": []
+}
