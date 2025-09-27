@@ -163,29 +163,32 @@ const convertPdf = (inputFile: File, targetFormat: string): Promise<Blob> => {
 
 const convertDocx = (inputFile: File, targetFormat: string): Promise<Blob> => {
     return new Promise(async (resolve, reject) => {
+        const element = document.createElement('div');
         try {
             const arrayBuffer = await inputFile.arrayBuffer();
             if (targetFormat === 'pdf') {
                 const { value: html } = await mammoth.convertToHtml({ arrayBuffer });
                 
-                const element = document.createElement('div');
                 element.innerHTML = html;
                 element.style.position = 'absolute';
                 element.style.left = '-9999px';
-                element.style.width = '800px';
+                element.style.width = '794px'; // A4 width in pixels at 96 DPI
+                element.style.padding = '40px';
+                element.style.backgroundColor = 'white';
+                element.style.color = 'black';
                 document.body.appendChild(element);
 
+                const canvas = await html2canvas(element, { scale: 2 });
+                const imgData = canvas.toDataURL('image/png');
+                
                 const { jsPDF } = jspdf;
-                const doc = new jsPDF('p', 'pt', 'a4');
-                doc.html(element, {
-                    callback: function (doc) {
-                        document.body.removeChild(element);
-                        resolve(doc.output('blob'));
-                    },
-                    x: 10,
-                    y: 10,
-                    html2canvas: { scale: 0.7 }
-                });
+                const pdf = new jsPDF('p', 'pt', 'a4');
+                const pdfWidth = pdf.internal.pageSize.getWidth();
+                const pdfHeight = (canvas.height * pdfWidth) / canvas.width;
+
+                pdf.addImage(imgData, 'PNG', 0, 0, pdfWidth, pdfHeight);
+                resolve(pdf.output('blob'));
+
             } else if (targetFormat === 'txt') {
                 const { value } = await mammoth.extractRawText({ arrayBuffer });
                 resolve(new Blob([value], { type: 'text/plain' }));
@@ -194,6 +197,10 @@ const convertDocx = (inputFile: File, targetFormat: string): Promise<Blob> => {
             }
         } catch (error) {
             reject(error);
+        } finally {
+             if (document.body.contains(element)) {
+                document.body.removeChild(element);
+            }
         }
     });
 };
@@ -302,6 +309,7 @@ function App() {
   const [rotation, setRotation] = useState({ x: 0, y: 0 });
   const [displayFormats, setDisplayFormats] = useState<Record<string, string[]>>(formatGroups);
   const [theme, setTheme] = useState('dark');
+  const [dropzoneMessage, setDropzoneMessage] = useState('Drop Here');
   
   const converterRef = useRef<HTMLDivElement>(null);
   const convertedViewRef = useRef<HTMLDivElement>(null);
@@ -361,25 +369,27 @@ function App() {
   const handleFileChange = (files: FileList | null) => {
     if (files && files.length > 0) {
       const newFile = files[0];
+      const category = getCategoryKey(newFile);
+      const supportedCategories: (keyof typeof formatGroups)[] = ['Image', 'Document', 'Audio'];
+
+      if (!category || !supportedCategories.includes(category)) {
+          setDropzoneMessage('Unsupported file type.');
+          setTimeout(() => setDropzoneMessage('Drop Here'), 3000);
+          return; // Prevent setting the file
+      }
+
+      setDropzoneMessage('Drop Here'); // Reset message on valid file
       setFile(newFile);
       setSelectedFormat(null);
       setIsConverted(false);
       setConvertedFileBlob(null);
       setIsFormatDropdownOpen(false);
 
-      const category = getCategoryKey(newFile);
-      if (category) {
-          const currentFormat = newFile.name.split('.').pop()?.toUpperCase();
-          const appropriateFormats = formatGroups[category].filter(
-              (format) => format !== currentFormat
-          );
-          setDisplayFormats({ [category]: appropriateFormats });
-      } else {
-          // Fallback for unknown file types
-          const allFormats = { ...formatGroups };
-          delete allFormats['Archive']; // Don't show archive as a conversion option for unknown types
-          setDisplayFormats(allFormats);
-      }
+      const currentFormat = newFile.name.split('.').pop()?.toUpperCase();
+      const appropriateFormats = formatGroups[category].filter(
+          (format) => format !== currentFormat
+      );
+      setDisplayFormats({ [category]: appropriateFormats });
     }
   };
 
@@ -415,6 +425,7 @@ function App() {
     setSelectedFormat(null);
     setConvertedFileBlob(null);
     setDisplayFormats(formatGroups);
+    setDropzoneMessage('Drop Here');
     window.scrollTo({ top: 0, behavior: 'smooth' });
   };
   
@@ -467,8 +478,7 @@ function App() {
             } else if (fileCategory === 'Audio') {
                 blob = await convertAudio(file, targetFormat);
             } else {
-                console.warn(`Conversion for ${file.type} is not fully supported. A mock conversion will be performed.`);
-                blob = new Blob([file], { type: file.type });
+                throw new Error(`Conversion for ${file.type} is not supported.`);
             }
             
             if (blob) {
@@ -555,7 +565,7 @@ function App() {
                     ></div>
                     
                     <div
-                        className="absolute inset-[1px] rounded-[31px] flex flex-col items-center justify-center cursor-pointer group"
+                        className={`absolute inset-[1px] rounded-[31px] flex flex-col items-center justify-center cursor-pointer group transition-colors duration-300 ${dropzoneMessage !== 'Drop Here' ? 'text-red-500 dark:text-red-400' : ''}`}
                         onClick={() => document.getElementById('file-upload')?.click()}
                         style={{
                             boxShadow: 'inset 0px 4px 10px rgba(0, 0, 0, 0.5)',
@@ -565,7 +575,7 @@ function App() {
                          <div className="transform transition-transform duration-300 ease-out group-hover:scale-110">
                           <UploadIcon />
                         </div>
-                        <p className="mt-4 text-xl transition-transform duration-300 ease-out group-hover:scale-110">Drop Here</p>
+                        <p className="mt-4 text-xl transition-transform duration-300 ease-out group-hover:scale-110">{dropzoneMessage}</p>
                         <input type="file" id="file-upload" className="hidden" onChange={(e) => handleFileChange(e.target.files)} accept="*" />
                     </div>
                 </div>
