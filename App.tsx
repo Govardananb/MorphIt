@@ -3,6 +3,9 @@ import React, { useState, useRef, useEffect } from 'react';
 // Declare external libraries loaded via CDN
 declare const jspdf: any;
 declare const pdfjsLib: any;
+declare const mammoth: any;
+declare const html2canvas: any;
+declare const lamejs: any;
 
 // SVG Icons
 const UploadIcon = () => (
@@ -56,26 +59,234 @@ const ThemeToggle = ({ theme, setTheme }: { theme: string, setTheme: (theme: str
 
 
 const formatGroups = {
-  "Image": ["JPG", "PNG", "WEBP", "GIF", "SVG", "PDF"],
+  "Image": ["JPG", "PNG", "WEBP", "GIF", "PDF"],
   "Document": ["PDF", "DOCX", "TXT", "JPG", "PNG"],
-  "Audio": ["MP3", "WAV", "FLAC"],
-  "Video": ["MP4", "MOV", "MKV"],
-  "Archive": ["ZIP", "7Z"],
+  "Audio": ["MP3", "WAV"],
+  "Video": ["MP4", "WEBM"],
+  "Archive": ["ZIP"],
 };
 
-const imageFormats = new Set(["JPG", "PNG", "WEBP", "GIF", "SVG"]);
+const imageFormats = new Set(["JPG", "PNG", "WEBP", "GIF"]);
 
 const getCategoryKey = (file: File): keyof typeof formatGroups | null => {
     const mime = file.type;
     const ext = file.name.split('.').pop()?.toLowerCase() || '';
   
     if (mime.startsWith('image/')) return 'Image';
-    if (['pdf', 'docx', 'txt'].includes(ext) || mime === 'application/pdf') return 'Document';
+    if (ext === 'pdf' || mime === 'application/pdf') return 'Document';
+    if (ext === 'docx' || mime === 'application/vnd.openxmlformats-officedocument.wordprocessingml.document') return 'Document';
+    if (ext === 'txt' || mime === 'text/plain') return 'Document';
     if (mime.startsWith('audio/')) return 'Audio';
     if (mime.startsWith('video/')) return 'Video';
-    if (['zip', '7z'].includes(ext)) return 'Archive';
+    if (['zip', '7z'].includes(ext) || mime === 'application/zip') return 'Archive';
   
     return null;
+};
+
+// --- CONVERSION HELPERS ---
+
+const convertImage = (inputFile: File, targetFormat: string): Promise<Blob> => {
+    return new Promise((resolve, reject) => {
+        const image = new Image();
+        const objectUrl = URL.createObjectURL(inputFile);
+        image.src = objectUrl;
+
+        image.onload = () => {
+            try {
+                if (targetFormat === 'pdf') {
+                    const { jsPDF } = jspdf;
+                    const doc = new jsPDF({
+                        orientation: image.width > image.height ? 'landscape' : 'portrait',
+                        unit: 'px',
+                        format: [image.width, image.height]
+                    });
+                    doc.addImage(image, 'PNG', 0, 0, image.width, image.height);
+                    resolve(doc.output('blob'));
+                } else {
+                    const canvas = document.createElement('canvas');
+                    canvas.width = image.width;
+                    canvas.height = image.height;
+                    const ctx = canvas.getContext('2d');
+                    if (!ctx) throw new Error("Could not get canvas context");
+
+                    if (targetFormat === 'jpg' || targetFormat === 'jpeg') {
+                        ctx.fillStyle = 'white';
+                        ctx.fillRect(0, 0, canvas.width, canvas.height);
+                    }
+                    ctx.drawImage(image, 0, 0);
+                    const mimeType = `image/${targetFormat}`;
+                    canvas.toBlob((blob) => {
+                        if (blob) resolve(blob);
+                        else reject(new Error("Canvas toBlob failed"));
+                    }, mimeType, 0.92);
+                }
+            } finally {
+                URL.revokeObjectURL(objectUrl);
+            }
+        };
+        image.onerror = (err) => {
+            URL.revokeObjectURL(objectUrl);
+            reject(err);
+        };
+    });
+};
+
+const convertPdf = (inputFile: File, targetFormat: string): Promise<Blob> => {
+    return new Promise(async (resolve, reject) => {
+        if (!imageFormats.has(targetFormat.toUpperCase())) {
+            return reject(new Error(`PDF to ${targetFormat} conversion not supported.`));
+        }
+        try {
+            const fileBuffer = await inputFile.arrayBuffer();
+            const pdf = await pdfjsLib.getDocument(fileBuffer).promise;
+            const page = await pdf.getPage(1); // Only convert first page for simplicity
+            const viewport = page.getViewport({ scale: 1.5 });
+
+            const canvas = document.createElement('canvas');
+            const context = canvas.getContext('2d');
+            if (!context) throw new Error("Could not get canvas context");
+
+            canvas.height = viewport.height;
+            canvas.width = viewport.width;
+
+            await page.render({ canvasContext: context, viewport: viewport }).promise;
+            const mimeType = `image/${targetFormat.toLowerCase()}`;
+            canvas.toBlob((blob) => {
+                if (blob) resolve(blob);
+                else reject(new Error("Canvas toBlob failed for PDF conversion"));
+            }, mimeType, 0.92);
+        } catch (error) {
+            reject(error);
+        }
+    });
+};
+
+const convertDocx = (inputFile: File, targetFormat: string): Promise<Blob> => {
+    return new Promise(async (resolve, reject) => {
+        try {
+            const arrayBuffer = await inputFile.arrayBuffer();
+            if (targetFormat === 'pdf') {
+                const { value: html } = await mammoth.convertToHtml({ arrayBuffer });
+                
+                const element = document.createElement('div');
+                element.innerHTML = html;
+                element.style.position = 'absolute';
+                element.style.left = '-9999px';
+                element.style.width = '800px';
+                document.body.appendChild(element);
+
+                const { jsPDF } = jspdf;
+                const doc = new jsPDF('p', 'pt', 'a4');
+                doc.html(element, {
+                    callback: function (doc) {
+                        document.body.removeChild(element);
+                        resolve(doc.output('blob'));
+                    },
+                    x: 10,
+                    y: 10,
+                    html2canvas: { scale: 0.7 }
+                });
+            } else if (targetFormat === 'txt') {
+                const { value } = await mammoth.extractRawText({ arrayBuffer });
+                resolve(new Blob([value], { type: 'text/plain' }));
+            } else {
+                reject(new Error(`DOCX to ${targetFormat} conversion not supported.`));
+            }
+        } catch (error) {
+            reject(error);
+        }
+    });
+};
+
+const audioBufferToWav = (buffer: AudioBuffer): Blob => {
+    const numOfChan = buffer.numberOfChannels,
+        len = buffer.length * numOfChan * 2 + 44,
+        arrBuffer = new ArrayBuffer(len),
+        view = new DataView(arrBuffer),
+        chans = [];
+    let i, sample, offset = 0, pos = 0;
+
+    setUint32(0x46464952); // "RIFF"
+    setUint32(len - 8); // file length - 8
+    setUint32(0x45564157); // "WAVE"
+    setUint32(0x20746d66); // "fmt " chunk
+    setUint32(16); // length = 16
+    setUint16(1); // PCM (uncompressed)
+    setUint16(numOfChan);
+    setUint32(buffer.sampleRate);
+    setUint32(buffer.sampleRate * 2 * numOfChan); // byte rate
+    setUint16(numOfChan * 2); // block align
+    setUint16(16); // bits per sample
+    setUint32(0x61746164); // "data" - chunk
+    setUint32(len - pos - 4); // chunk length
+
+    for (i = 0; i < buffer.numberOfChannels; i++) chans.push(buffer.getChannelData(i));
+
+    while (pos < len) {
+        for (i = 0; i < numOfChan; i++) {
+            sample = Math.max(-1, Math.min(1, chans[i][offset]));
+            sample = (0.5 + sample < 0 ? sample * 32768 : sample * 32767) | 0;
+            view.setInt16(pos, sample, true);
+            pos += 2;
+        }
+        offset++;
+    }
+
+    return new Blob([view], { type: "audio/wav" });
+
+    function setUint16(data) { view.setUint16(pos, data, true); pos += 2; }
+    function setUint32(data) { view.setUint32(pos, data, true); pos += 4; }
+};
+
+
+const convertAudio = (inputFile: File, targetFormat: string): Promise<Blob> => {
+    return new Promise(async (resolve, reject) => {
+        try {
+            const audioContext = new (window.AudioContext || (window as any).webkitAudioContext)();
+            const arrayBuffer = await inputFile.arrayBuffer();
+            const audioBuffer = await audioContext.decodeAudioData(arrayBuffer);
+
+            if (targetFormat === 'wav') {
+                resolve(audioBufferToWav(audioBuffer));
+            } else if (targetFormat === 'mp3') {
+                const channels = audioBuffer.numberOfChannels;
+                const sampleRate = audioBuffer.sampleRate;
+                const mp3encoder = new lamejs.Mp3Encoder(channels, sampleRate, 128); // 128kbps
+
+                const convertFloat32ToInt16 = (buffer: Float32Array): Int16Array => {
+                    let l = buffer.length;
+                    const buf = new Int16Array(l);
+                    while (l--) buf[l] = Math.min(1, buffer[l]) * 32767;
+                    return buf;
+                };
+
+                const left = convertFloat32ToInt16(audioBuffer.getChannelData(0));
+                const right = channels > 1 ? convertFloat32ToInt16(audioBuffer.getChannelData(1)) : null;
+                const mp3Data = [];
+                const sampleBlockSize = 1152;
+
+                for (let i = 0; i < left.length; i += sampleBlockSize) {
+                    const leftChunk = left.subarray(i, i + sampleBlockSize);
+                    let mp3buf;
+                    if (right) {
+                        const rightChunk = right.subarray(i, i + sampleBlockSize);
+                        mp3buf = mp3encoder.encodeBuffer(leftChunk, rightChunk);
+                    } else {
+                        mp3buf = mp3encoder.encodeBuffer(leftChunk);
+                    }
+                    if (mp3buf.length > 0) mp3Data.push(new Int8Array(mp3buf));
+                }
+                const mp3buf = mp3encoder.flush();
+                if (mp3buf.length > 0) mp3Data.push(new Int8Array(mp3buf));
+
+                resolve(new Blob(mp3Data, { type: 'audio/mp3' }));
+            } else {
+                reject(new Error(`Audio to ${targetFormat} conversion not supported.`));
+            }
+        } catch (error) {
+            reject(error);
+        }
+    });
 };
 
 
@@ -164,7 +375,10 @@ function App() {
           );
           setDisplayFormats({ [category]: appropriateFormats });
       } else {
-          setDisplayFormats(formatGroups);
+          // Fallback for unknown file types
+          const allFormats = { ...formatGroups };
+          delete allFormats['Archive']; // Don't show archive as a conversion option for unknown types
+          setDisplayFormats(allFormats);
       }
     }
   };
@@ -233,93 +447,45 @@ function App() {
     setIsConverting(true);
     
     setTimeout(async () => {
-        const isImageToFile = file.type.startsWith('image/');
-        const isPdfToFile = file.type === 'application/pdf';
+        const fileExtension = file.name.split('.').pop()?.toLowerCase() || '';
+        const targetFormat = selectedFormat.toLowerCase();
 
-        if (isImageToFile && selectedFormat.toUpperCase() === 'PDF') {
-            const image = new Image();
-            image.src = URL.createObjectURL(file);
-            image.onload = () => {
-                const { jsPDF } = jspdf;
-                const doc = new jsPDF({
-                    orientation: image.width > image.height ? 'landscape' : 'portrait',
-                    unit: 'px',
-                    format: [image.width, image.height]
-                });
-                doc.addImage(image, 'PNG', 0, 0, image.width, image.height);
-                const pdfBlob = doc.output('blob');
-                setConvertedFileBlob(pdfBlob);
-                setIsConverting(false);
-                setIsConverted(true);
-                URL.revokeObjectURL(image.src);
-            };
-            return;
-        }
+        try {
+            let blob: Blob | null = null;
+            const fileCategory = getCategoryKey(file);
 
-        if (isPdfToFile && imageFormats.has(selectedFormat.toUpperCase())) {
-            try {
-                const fileBuffer = await file.arrayBuffer();
-                const pdf = await pdfjsLib.getDocument(fileBuffer).promise;
-                const page = await pdf.getPage(1);
-                const viewport = page.getViewport({ scale: 1.5 });
-
-                const canvas = document.createElement('canvas');
-                const context = canvas.getContext('2d');
-                canvas.height = viewport.height;
-                canvas.width = viewport.width;
-
-                await page.render({ canvasContext: context, viewport: viewport }).promise;
-
-                const mimeType = `image/${selectedFormat.toLowerCase()}`;
-                canvas.toBlob((blob) => {
-                    if (blob) {
-                        setConvertedFileBlob(blob);
-                    }
-                    setIsConverting(false);
-                    setIsConverted(true);
-                }, mimeType, 0.92);
-
-            } catch(error) {
-                console.error("Error converting PDF to image:", error);
-                alert("Failed to convert PDF to image.");
-                setIsConverting(false);
+            if (fileCategory === 'Image') {
+                blob = await convertImage(file, targetFormat);
+            } else if (fileCategory === 'Document') {
+                if(fileExtension === 'pdf') {
+                    blob = await convertPdf(file, targetFormat);
+                } else if (fileExtension === 'docx') {
+                    blob = await convertDocx(file, targetFormat);
+                } else {
+                     throw new Error(`Conversion from .${fileExtension} is not supported yet.`);
+                }
+            } else if (fileCategory === 'Audio') {
+                blob = await convertAudio(file, targetFormat);
+            } else {
+                console.warn(`Conversion for ${file.type} is not fully supported. A mock conversion will be performed.`);
+                blob = new Blob([file], { type: file.type });
             }
-            return;
+            
+            if (blob) {
+                setConvertedFileBlob(blob);
+                setIsConverted(true);
+            } else {
+                throw new Error("Conversion resulted in an empty file.");
+            }
+        } catch (error) {
+            const errorMessage = error instanceof Error ? error.message : String(error);
+            console.error("Conversion failed:", errorMessage);
+            alert(`An error occurred during conversion: ${errorMessage}`);
+            setIsConverted(false);
+        } finally {
+            setIsConverting(false);
         }
-
-        if (isImageToFile && imageFormats.has(selectedFormat.toUpperCase())) {
-            const image = new Image();
-            image.src = URL.createObjectURL(file);
-            image.onload = () => {
-                const canvas = document.createElement('canvas');
-                canvas.width = image.width;
-                canvas.height = image.height;
-                const ctx = canvas.getContext('2d');
-                if (!ctx) {
-                    setIsConverting(false); return;
-                }
-                if (selectedFormat.toUpperCase() === 'JPG' || selectedFormat.toUpperCase() === 'JPEG') {
-                     ctx.fillStyle = 'white';
-                     ctx.fillRect(0, 0, canvas.width, canvas.height);
-                }
-                ctx.drawImage(image, 0, 0);
-                const mimeType = `image/${selectedFormat.toLowerCase()}`;
-                canvas.toBlob((blob) => {
-                    if (blob) setConvertedFileBlob(blob);
-                    setIsConverting(false);
-                    setIsConverted(true);
-                    URL.revokeObjectURL(image.src);
-                }, mimeType, 0.92);
-            };
-            return;
-        }
-        
-        const newBlob = new Blob([file], { type: file.type });
-        setConvertedFileBlob(newBlob);
-        setIsConverting(false);
-        setIsConverted(true);
-
-    }, 2500);
+    }, 200);
   };
 
   const handleDownload = () => {
@@ -339,6 +505,15 @@ function App() {
       a.click();
       document.body.removeChild(a);
       URL.revokeObjectURL(url);
+  };
+  
+  const handleConvertAgain = () => {
+    setIsConverted(false);
+    setConvertedFileBlob(null);
+    setSelectedFormat(null);
+    setTimeout(() => {
+        converterRef.current?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    }, 100);
   };
 
   const shadowColor = theme === 'dark' ? 'rgba(255, 206, 206, 0.3)' : 'rgba(91, 74, 74, 0.15)';
@@ -422,12 +597,20 @@ function App() {
                                 <p>Preview not available for this file type</p>
                             )}
                         </div>
-                        <button
-                            onClick={handleDownload}
-                            className="w-full bg-[#D98695] text-white dark:bg-[#FFCECE] dark:text-[#0E0B0B] font-bold h-14 rounded-xl transition-opacity hover:opacity-90"
-                        >
-                            Download
-                        </button>
+                        <div className="w-full flex flex-col sm:flex-row items-center gap-4">
+                            <button
+                                onClick={handleDownload}
+                                className="w-full flex-1 bg-[#D98695] text-white dark:bg-[#FFCECE] dark:text-[#0E0B0B] font-bold h-14 rounded-xl transition-opacity hover:opacity-90"
+                            >
+                                Download
+                            </button>
+                            <button
+                                onClick={handleConvertAgain}
+                                className="w-full flex-1 bg-transparent border border-[#D98695] dark:border-[#FFCECE] text-[#5B4A4A] dark:text-[#FFCECE] font-bold h-14 rounded-xl transition-colors hover:bg-black/5 dark:hover:bg-white/5"
+                            >
+                                Convert Again
+                            </button>
+                        </div>
                     </div>
                 ) : (
                     <div className="w-full flex flex-col sm:flex-row items-center gap-4">
@@ -440,23 +623,26 @@ function App() {
                             </button>
                             {isFormatDropdownOpen && (
                                 <div className="absolute top-full left-0 mt-2 w-full max-h-60 overflow-y-auto bg-white dark:bg-[#1c1818] rounded-xl z-10 p-2 space-y-2 animate-fade-in-up">
-                                    {/* FIX: Replaced Object.entries with Object.keys for better type inference, resolving an error where `formats.map` would fail. */}
-                                    {Object.keys(displayFormats).map((groupName) => (
-                                        <div key={groupName}>
-                                            <h3 className="px-3 py-1 text-sm font-semibold text-gray-500 dark:text-gray-400">{groupName}</h3>
-                                            <div className="grid grid-cols-2 gap-2">
-                                                {displayFormats[groupName].map(format => (
-                                                    <button 
-                                                        key={format} 
-                                                        onClick={() => { setSelectedFormat(format); setIsFormatDropdownOpen(false); }}
-                                                        className="p-3 text-center rounded-lg hover:bg-gray-50 dark:hover:bg-[#2a2525] transition-colors"
-                                                    >
-                                                        {format}
-                                                    </button>
-                                                ))}
+                                    {Object.keys(displayFormats).length === 0 ? (
+                                        <p className="px-3 py-2 text-gray-500">No conversions available for this file type.</p>
+                                    ) : (
+                                        Object.keys(displayFormats).map((groupName) => (
+                                            <div key={groupName}>
+                                                <h3 className="px-3 py-1 text-sm font-semibold text-gray-500 dark:text-gray-400">{groupName}</h3>
+                                                <div className="grid grid-cols-2 gap-2">
+                                                    {displayFormats[groupName].map(format => (
+                                                        <button 
+                                                            key={format} 
+                                                            onClick={() => { setSelectedFormat(format); setIsFormatDropdownOpen(false); }}
+                                                            className="p-3 text-center rounded-lg hover:bg-gray-50 dark:hover:bg-[#2a2525] transition-colors"
+                                                        >
+                                                            {format}
+                                                        </button>
+                                                    ))}
+                                                </div>
                                             </div>
-                                        </div>
-                                    ))}
+                                        ))
+                                    )}
                                 </div>
                             )}
                         </div>

@@ -1,0 +1,9 @@
+{
+  "name": "MorphIt - File Converter",
+  "short_name": "MorphIt",
+  "description": "An elegant, single-page application to instantly transform your files. Works offline.",
+  "start_url": ".",
+  "display": "standalone",
+  "background_color": "#0E0B0B",
+  "theme_color": "#0E0B0B"
+}
