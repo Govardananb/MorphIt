@@ -1,10 +1,15 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="en" class="dark">
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>MorphIt - File Converter</title>
     <script src="https://cdn.tailwindcss.com"></script>
+    <script>
+      tailwind.config = {
+        darkMode: 'class',
+      }
+    </script>
     <style>
       @import url('https://fonts.googleapis.com/css2?family=Sora:wght@100..800&display=swap');
       html {
@@ -12,6 +17,15 @@
       }
       body {
         font-family: 'Sora', sans-serif;
+        background-image:
+          linear-gradient(rgba(0,0,0,0.03) 1px, transparent 1px),
+          linear-gradient(90deg, rgba(0,0,0,0.03) 1px, transparent 1px);
+        background-size: 40px 40px;
+      }
+      .dark body {
+         background-image:
+          linear-gradient(rgba(255,255,255,0.03) 1px, transparent 1px),
+          linear-gradient(90deg, rgba(255,255,255,0.03) 1px, transparent 1px);
       }
 
       @keyframes fade-in {
@@ -53,7 +67,7 @@
 }
 </script>
 </head>
-  <body class="bg-[#0E0B0B] text-[#715959]">
+  <body class="bg-[#FDF8F8] dark:bg-[#0E0B0B] transition-colors duration-300">
     <div id="root"></div>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/2.16.105/pdf.min.js"></script>

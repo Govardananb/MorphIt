@@ -4,34 +4,56 @@ import React, { useState, useRef, useEffect } from 'react';
 declare const jspdf: any;
 declare const pdfjsLib: any;
 
-
 // SVG Icons
 const UploadIcon = () => (
   <svg width="48" height="48" viewBox="0 0 48 48" fill="none" xmlns="http://www.w3.org/2000/svg" className="transition-transform duration-300 ease-out">
-    <path d="M14 26L24 16L34 26" stroke="#715959" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
-    <path d="M24 16V34" stroke="#715959" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
-    <path d="M40 32V38C40 39.1046 39.1046 40 38 40H10C8.89543 40 8 39.1046 8 38V32" stroke="#715959" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+    <path d="M14 26L24 16L34 26" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+    <path d="M24 16V34" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+    <path d="M40 32V38C40 39.1046 39.1046 40 38 40H10C8.89543 40 8 39.1046 8 38V32" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
   </svg>
 );
 
 const CloseIcon = () => (
     <svg width="24" height="24" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-        <path d="M18 6L6 18" stroke="#715959" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
-        <path d="M6 6L18 18" stroke="#715959" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+        <path d="M18 6L6 18" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+        <path d="M6 6L18 18" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
     </svg>
 );
 
 const ChevronDownIcon = () => (
     <svg width="24" height="24" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-        <path d="M6 9L12 15L18 9" stroke="#715959" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+        <path d="M6 9L12 15L18 9" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
     </svg>
 );
 
 const PlayIcon = () => (
      <svg width="24" height="24" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-        <path d="M5 3L19 12L5 21V3Z" stroke="#715959" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+        <path d="M5 3L19 12L5 21V3Z" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
     </svg>
 );
+
+const ThemeToggle = ({ theme, setTheme }: { theme: string, setTheme: (theme: string) => void }) => {
+  const toggleTheme = () => {
+    setTheme(theme === 'dark' ? 'light' : 'dark');
+  };
+  
+  const SunIcon = () => (
+    <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="text-[#5B4A4A]"><circle cx="12" cy="12" r="5"></circle><line x1="12" y1="1" x2="12" y2="3"></line><line x1="12" y1="21" x2="12" y2="23"></line><line x1="4.22" y1="4.22" x2="5.64" y2="5.64"></line><line x1="18.36" y1="18.36" x2="19.78" y2="19.78"></line><line x1="1" y1="12" x2="3" y2="12"></line><line x1="21" y1="12" x2="23" y2="12"></line><line x1="4.22" y1="19.78" x2="5.64" y2="18.36"></line><line x1="18.36" y1="5.64" x2="19.78" y2="4.22"></line></svg>
+  );
+
+  const MoonIcon = () => (
+    <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="text-[#FFCECE]"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"></path></svg>
+  );
+
+  return (
+    <button onClick={toggleTheme} className="w-14 h-8 rounded-full bg-white/50 dark:bg-black/20 p-1 flex items-center transition-colors duration-300 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-[#D98695] dark:focus:ring-offset-black">
+      <div className={`w-6 h-6 rounded-full bg-white dark:bg-[#2a2525] flex items-center justify-center transform transition-transform duration-300 ${theme === 'dark' ? 'translate-x-6' : 'translate-x-0'}`}>
+        {theme === 'dark' ? <MoonIcon /> : <SunIcon />}
+      </div>
+    </button>
+  );
+};
+
 
 const formatGroups = {
   "Image": ["JPG", "PNG", "WEBP", "GIF", "SVG", "PDF"],
@@ -68,10 +90,19 @@ function App() {
   const [convertedFileBlob, setConvertedFileBlob] = useState<Blob | null>(null);
   const [rotation, setRotation] = useState({ x: 0, y: 0 });
   const [displayFormats, setDisplayFormats] = useState<Record<string, string[]>>(formatGroups);
+  const [theme, setTheme] = useState('dark');
   
   const converterRef = useRef<HTMLDivElement>(null);
   const convertedViewRef = useRef<HTMLDivElement>(null);
   const dropzoneRef = useRef<HTMLDivElement>(null);
+
+   useEffect(() => {
+    if (theme === 'dark') {
+      document.documentElement.classList.add('dark');
+    } else {
+      document.documentElement.classList.remove('dark');
+    }
+  }, [theme]);
 
   useEffect(() => {
     if (file) {
@@ -92,19 +123,18 @@ function App() {
   useEffect(() => {
     let objectUrl: string | null = null;
     if (convertedFileBlob) {
-      // For preview, only create URL if it's an image blob
       if (convertedFileBlob.type.startsWith('image/')) {
         objectUrl = URL.createObjectURL(convertedFileBlob);
         setPreviewUrl(objectUrl);
       } else {
-        setPreviewUrl(null); // No preview for non-image blobs like PDF
+        setPreviewUrl(null);
       }
     } else if (file) {
       if(file.type.startsWith('image/')) {
         objectUrl = URL.createObjectURL(file);
         setPreviewUrl(objectUrl);
       } else {
-         setPreviewUrl(null); // No preview for non-image files like PDF
+         setPreviewUrl(null);
       }
     } else {
       setPreviewUrl(null);
@@ -134,7 +164,6 @@ function App() {
           );
           setDisplayFormats({ [category]: appropriateFormats });
       } else {
-          // Fallback to all formats if category is unknown
           setDisplayFormats(formatGroups);
       }
     }
@@ -171,7 +200,7 @@ function App() {
     setIsConverting(false);
     setSelectedFormat(null);
     setConvertedFileBlob(null);
-    setDisplayFormats(formatGroups); // Reset formats
+    setDisplayFormats(formatGroups);
     window.scrollTo({ top: 0, behavior: 'smooth' });
   };
   
@@ -207,7 +236,6 @@ function App() {
         const isImageToFile = file.type.startsWith('image/');
         const isPdfToFile = file.type === 'application/pdf';
 
-        // Case 1: Image to PDF
         if (isImageToFile && selectedFormat.toUpperCase() === 'PDF') {
             const image = new Image();
             image.src = URL.createObjectURL(file);
@@ -228,12 +256,11 @@ function App() {
             return;
         }
 
-        // Case 2: PDF to Image
         if (isPdfToFile && imageFormats.has(selectedFormat.toUpperCase())) {
             try {
                 const fileBuffer = await file.arrayBuffer();
                 const pdf = await pdfjsLib.getDocument(fileBuffer).promise;
-                const page = await pdf.getPage(1); // Convert the first page
+                const page = await pdf.getPage(1);
                 const viewport = page.getViewport({ scale: 1.5 });
 
                 const canvas = document.createElement('canvas');
@@ -260,7 +287,6 @@ function App() {
             return;
         }
 
-        // Case 3: Image to Image (existing logic)
         if (isImageToFile && imageFormats.has(selectedFormat.toUpperCase())) {
             const image = new Image();
             image.src = URL.createObjectURL(file);
@@ -288,7 +314,6 @@ function App() {
             return;
         }
         
-        // Fallback: Simulate conversion for other types
         const newBlob = new Blob([file], { type: file.type });
         setConvertedFileBlob(newBlob);
         setIsConverting(false);
@@ -311,48 +336,49 @@ function App() {
       a.href = url;
       a.download = newFilename;
       document.body.appendChild(a);
-a.click();
+      a.click();
       document.body.removeChild(a);
       URL.revokeObjectURL(url);
   };
 
+  const shadowColor = theme === 'dark' ? 'rgba(255, 206, 206, 0.3)' : 'rgba(91, 74, 74, 0.15)';
+  const shadowColorHover = theme === 'dark' ? 'rgba(255, 206, 206, 0.4)' : 'rgba(91, 74, 74, 0.2)';
+
+  const dropzoneStyle = {
+      transformStyle: 'preserve-3d' as const,
+      transform: `perspective(1000px) rotateX(${rotation.x}deg) rotateY(${rotation.y}deg) scale(${isDragging ? 1.05 : 1})`,
+      boxShadow: isDragging 
+          ? `0 0 25px ${shadowColorHover}, 0 0 50px ${shadowColorHover}`
+          : `0 0 15px ${shadowColor}, 0 0 30px ${shadowColor}`,
+  };
+
   return (
-    <div className="min-h-screen flex flex-col items-center p-6 overflow-x-hidden">
+    <div className="min-h-screen flex flex-col items-center p-6 overflow-x-hidden text-[#5B4A4A] dark:text-[#FFCECE]">
       <header className="w-full max-w-7xl flex justify-between items-center animate-fade-in-down">
         <h1 className="text-2xl font-semibold">MorphIt</h1>
-        <svg width="32" height="32" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-            <path d="M4 6H20M4 12H20M4 18H20" stroke="#715959" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
-        </svg>
+        <ThemeToggle theme={theme} setTheme={setTheme} />
       </header>
 
-      <main className="flex-grow flex flex-col items-center justify-center text-center w-full space-y-24 pt-16 pb-24">
+      <main className="flex-grow flex flex-col items-center justify-center text-center w-full space-y-24 pt-24 pb-32">
         <section className="w-full flex flex-col items-center">
             <div className="w-full animate-fade-in-up" style={{ animationDelay: '200ms' }}>
                 <h2 className="text-5xl font-bold mb-4">One tool. Every format you need</h2>
                 <p className="text-2xl md:text-3xl max-w-3xl mx-auto">Instantly transform your file. Choose the format and download in a snap.</p>
             </div>
 
-            <div className="mt-16 w-full flex justify-center animate-fade-in-up" style={{ animationDelay: '400ms' }}>
+            <div className="mt-24 w-full flex justify-center animate-fade-in-up" style={{ animationDelay: '400ms' }}>
                  <div
                     ref={dropzoneRef}
                     onDragEnter={handleDragEnter} onDragLeave={handleDragLeave} onDragOver={handleDragOver} onDrop={handleDrop}
                     onMouseMove={handleMouseMove} onMouseLeave={handleMouseLeave}
                     className="relative w-[380px] h-[220px] md:w-[500px] md:h-[260px] rounded-[32px] transition-transform duration-300 ease-out"
-                    style={{
-                        transformStyle: 'preserve-3d',
-                        transform: `perspective(1000px) rotateX(${rotation.x}deg) rotateY(${rotation.y}deg) scale(${isDragging ? 1.05 : 1})`,
-                        boxShadow: isDragging 
-                            ? '0 0 25px rgba(113, 89, 89, 0.8), 0 0 50px rgba(113, 89, 89, 0.6)'
-                            : '0 0 15px rgba(113, 89, 89, 0.5), 0 0 30px rgba(113, 89, 89, 0.3)',
-                    }}
+                    style={dropzoneStyle}
                  >
-                    {/* Glass Layer */}
                     <div 
-                        className="absolute inset-[1px] rounded-[31px] bg-[#715959]/20 backdrop-blur-xl"
+                        className="absolute inset-[1px] rounded-[31px] bg-[#5B4A4A]/5 dark:bg-[#FFCECE]/10 backdrop-blur-xl"
                         style={{ transform: 'translateZ(20px)' }}
                     ></div>
                     
-                    {/* Content Layer */}
                     <div
                         className="absolute inset-[1px] rounded-[31px] flex flex-col items-center justify-center cursor-pointer group"
                         onClick={() => document.getElementById('file-upload')?.click()}
@@ -374,7 +400,7 @@ a.click();
         {file && (
             <section ref={converterRef} className="w-full max-w-lg flex flex-col items-start text-left gap-4 animate-fade-in">
                 <div className="flex items-center gap-2 text-xl font-medium">
-                    <button onClick={handleRemoveFile} className="p-1 rounded-full hover:bg-white/5 transition-colors">
+                    <button onClick={handleRemoveFile} className="p-1 rounded-full hover:bg-black/5 dark:hover:bg-white/5 transition-colors">
                         <CloseIcon />
                     </button>
                     <span>{file.name}</span>
@@ -382,14 +408,14 @@ a.click();
                 
                 {isConverting ? (
                      <div className="w-full flex flex-col items-center gap-6">
-                        <div className="w-full h-64 bg-[#1c1818] rounded-xl flex items-center justify-center relative overflow-hidden">
-                            <div className="absolute top-0 left-0 w-full h-full bg-gradient-to-r from-transparent via-white/10 to-transparent -translate-x-full animate-[shimmer_2s_infinite]"></div>
+                        <div className="w-full h-64 bg-white dark:bg-[#1c1818] rounded-xl flex items-center justify-center relative overflow-hidden">
+                            <div className="absolute top-0 left-0 w-full h-full bg-gradient-to-r from-transparent via-black/5 dark:via-white/10 to-transparent -translate-x-full animate-[shimmer_2s_infinite]"></div>
                             <p>Processing...</p>
                         </div>
                     </div>
                 ) : isConverted ? (
                      <div ref={convertedViewRef} className="w-full flex flex-col items-center gap-6">
-                         <div className="w-full h-64 bg-[#1c1818] rounded-xl flex items-center justify-center p-4">
+                         <div className="w-full h-64 bg-white dark:bg-[#1c1818] rounded-xl flex items-center justify-center p-4">
                             {previewUrl ? (
                                 <img src={previewUrl} alt="File preview" className="max-w-full max-h-full object-contain rounded-lg" />
                             ) : (
@@ -398,7 +424,7 @@ a.click();
                         </div>
                         <button
                             onClick={handleDownload}
-                            className="w-full bg-gradient-to-br from-[#D98695] to-[#715959] text-[#0E0B0B] font-bold h-14 rounded-xl transition-opacity hover:opacity-90"
+                            className="w-full bg-[#D98695] text-white dark:bg-[#FFCECE] dark:text-[#0E0B0B] font-bold h-14 rounded-xl transition-opacity hover:opacity-90"
                         >
                             Download
                         </button>
@@ -406,23 +432,24 @@ a.click();
                 ) : (
                     <div className="w-full flex flex-col sm:flex-row items-center gap-4">
                         <div className="relative w-full sm:w-auto sm:flex-grow">
-                            <button onClick={() => setIsFormatDropdownOpen(!isFormatDropdownOpen)} className="w-full bg-[#1c1818] h-14 px-6 rounded-xl flex items-center justify-between transition-colors hover:bg-[#2a2525]">
+                            <button onClick={() => setIsFormatDropdownOpen(!isFormatDropdownOpen)} className="w-full bg-white dark:bg-[#1c1818] h-14 px-6 rounded-xl flex items-center justify-between transition-colors hover:bg-gray-50 dark:hover:bg-[#2a2525]">
                                 <div className="flex items-center gap-4">
                                     {selectedFormat ? <PlayIcon/> : <ChevronDownIcon />}
                                     <span>{selectedFormat || 'Choose Format'}</span>
                                 </div>
                             </button>
                             {isFormatDropdownOpen && (
-                                <div className="absolute top-full left-0 mt-2 w-full max-h-60 overflow-y-auto bg-[#1c1818] rounded-xl z-10 p-2 space-y-2">
-                                    {Object.entries(displayFormats).map(([groupName, formats]) => (
+                                <div className="absolute top-full left-0 mt-2 w-full max-h-60 overflow-y-auto bg-white dark:bg-[#1c1818] rounded-xl z-10 p-2 space-y-2 animate-fade-in-up">
+                                    {/* FIX: Replaced Object.entries with Object.keys for better type inference, resolving an error where `formats.map` would fail. */}
+                                    {Object.keys(displayFormats).map((groupName) => (
                                         <div key={groupName}>
-                                            <h3 className="px-3 py-1 text-sm font-semibold text-gray-400">{groupName}</h3>
+                                            <h3 className="px-3 py-1 text-sm font-semibold text-gray-500 dark:text-gray-400">{groupName}</h3>
                                             <div className="grid grid-cols-2 gap-2">
-                                                {formats.map(format => (
+                                                {displayFormats[groupName].map(format => (
                                                     <button 
                                                         key={format} 
                                                         onClick={() => { setSelectedFormat(format); setIsFormatDropdownOpen(false); }}
-                                                        className="p-3 text-center rounded-lg hover:bg-[#2a2525] transition-colors"
+                                                        className="p-3 text-center rounded-lg hover:bg-gray-50 dark:hover:bg-[#2a2525] transition-colors"
                                                     >
                                                         {format}
                                                     </button>
@@ -436,7 +463,7 @@ a.click();
                         <button 
                             onClick={handleConvert}
                             disabled={!selectedFormat}
-                            className="w-full sm:w-auto bg-gradient-to-br from-[#D98695] to-[#715959] text-[#0E0B0B] font-bold h-14 px-10 rounded-xl transition-opacity disabled:opacity-50 disabled:cursor-not-allowed hover:opacity-90"
+                            className="w-full sm:w-auto bg-[#D98695] text-white dark:bg-[#FFCECE] dark:text-[#0E0B0B] font-bold h-14 px-10 rounded-xl transition-opacity disabled:opacity-50 disabled:cursor-not-allowed hover:opacity-90"
                         >
                             Convert
                         </button>
